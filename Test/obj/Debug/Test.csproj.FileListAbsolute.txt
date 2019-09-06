@@ -1,6 +1,0 @@
-C:\Users\Administrator\Desktop\GPUTest\GPUBin\Test.exe.config
-C:\Users\Administrator\Desktop\GPUTest\GPUBin\Test.exe
-C:\Users\Administrator\Desktop\GPUTest\GPUBin\Test.pdb
-C:\Users\Administrator\Desktop\GPUTest\Test\Test\obj\Debug\Test.exe
-C:\Users\Administrator\Desktop\GPUTest\Test\Test\obj\Debug\Test.pdb
-C:\Users\Administrator\Desktop\GPUTest\Test\Test\obj\Debug\Test.csprojResolveAssemblyReference.cache
