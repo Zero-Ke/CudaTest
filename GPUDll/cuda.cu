@@ -152,46 +152,37 @@ void BinaryShowGPU(CppColorRange*range_host, int count, byte* src_host, byte* ds
 	uchar4* src_device2;
 	CppColorRange* range_device;
 	time.Begin();
-	cudastatus=cudaMalloc((void**)&range_device, count*sizeof(CppColorRange));
+	cudastatus = cudaMalloc((void**)&src_device, memSize);
+	//申请host锁页内存----------------耗时1
+	//拷贝host->host----------------耗时2
+	cudastatus = cudaMemcpy((void**)src_host2, src_host, memSize, cudaMemcpyHostToHost);
+	//拷贝host->device
+	cudastatus = cudaMemcpy((void**)src_device, src_host2, memSize, cudaMemcpyHostToDevice);
+	//host内存注册->锁页内存
+	//获得设备指针
+	cudastatus = cudaHostGetDevicePointer((void **)&range_device, range_host, 0);
 	
-	//cudastatus = cudaMalloc((void**)&src_device, memSize);
-	cudastatus = cudaHostAlloc((void**)&src_device2, memSize, cudaHostAllocDefault);
-	cudaHostGetDevicePointer(&src_device, src_device2, 0);
-	if (cudastatus != cudaSuccess)
-	{
-		time.Reset("Wrong!");
-		return;
-	}
-	time.Reset("malloc");
-	//cudastatus = cudaMemcpy((void**)src_device, src_host, memSize, cudaMemcpyHostToDevice);
-	cudastatus = cudaMemcpy((void**)src_device, src_host, memSize, cudaMemcpyHostToDevice);
-	cudastatus = cudaMemcpy((void**)range_device, range_host, count*sizeof(CppColorRange), cudaMemcpyHostToDevice);
-	if (cudastatus != cudaSuccess)
-	{
-		time.Reset("Wrong!");
-		return;
-	}
-	time.Reset("copy to device");
 	dim3 threadsPerBlock(32, 32);
+	time.Begin();
 	dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x, (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
-	kernel_BinaryzationShow << <blocksPerGrid, threadsPerBlock >> >(range_device, count, src_device2, width, height, isAll);
+	kernel_BinaryzationShow << <blocksPerGrid, threadsPerBlock >> >(range_device, count, src_device, width, height, isAll);
 	cudaThreadSynchronize();
 	cudaError_t cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
 	{
-		fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		fprintf(stderr, "kernel_BinaryzationShow launch failed: %s\n", cudaGetErrorString(cudaStatus));
 		return;
 	}
 	time.Reset("kernel calculate");
-	cudastatus=cudaMemcpy((void**)dst_host, src_device, memSize, cudaMemcpyDeviceToHost);
+	cudastatus = cudaMemcpy((void**)dst_host, src_device, memSize, cudaMemcpyDeviceToHost);
 	if (cudastatus!=cudaSuccess)
 	{
-		time.Reset("Wrong");
+		fprintf(stderr, "cudaMemcpy launch failed: %s\n", cudaGetErrorString(cudastatus));
 		return;
 	}
 	time.Reset("copy to host");
-	cudaFreeHost(src_device);
-	cudaFree(range_device);
+	cudaFree(src_device);
+	cudaFreeHost(range_device);
 }
 void Ratezation_GPU(byte* src_host, byte* dst_host, int width, int height)
 {
