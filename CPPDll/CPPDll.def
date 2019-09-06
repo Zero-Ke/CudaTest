@@ -1,0 +1,10 @@
+LIBRARY	"CPPDll"
+EXPORTS
+Test					@1		NONAME
+CppRatezationGPU		@2		NONAME
+CppBinaryzationGPU		@3		NONAME
+CppBinaryzationCPU		@4		NONAME
+CppRatezationCPU		@5		NONAME
+CppBinaryShowAll		@7		NONAME
+CppBinaryShowOne		@8		NONAME
+CppBinaryShow			@9		NONAME
