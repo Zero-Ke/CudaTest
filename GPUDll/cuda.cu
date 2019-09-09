@@ -4,7 +4,7 @@
 #include "GpuDll.h"
 #include "CppTimer.h"
 #include "iostream"
-
+#include <vector>
 #define redTo dst[xy].z
 #define greenTo dst[xy].y
 #define blueTo dst[xy].x
@@ -13,20 +13,20 @@ int  TestGPU()
 {
 	int n;
 	cudaGetDeviceCount(&n);
-	std::cout << "Cuda Device Count: " << n << std::endl;
+	//std::cout << "Cuda Device Count: " << n << std::endl;
 	if (n<0)
 	{
-		return n;
+		return 0;
 	}
 	cudaDeviceProp prop;
 	cudaGetDeviceProperties(&prop, 0);
 	int memSize = 10 * sizeof(uchar4);
 	uchar4* src_device;
-	//Initinaze...
+	//Init...
 	cudaMalloc((void**)&src_device, memSize);
-	int a = prop.canMapHostMemory;
+	//int a = prop.canMapHostMemory;
 	cudaFree(src_device);
-	std::cout << "Device name: " << a << std::endl;
+	//std::cout << "Device name: " << a << std::endl;
 	return n;
 }
 __global__ void Kernel_Ratezation(uchar4* pfr, uchar4* pto, int width, int height)
@@ -48,7 +48,7 @@ __global__ void Kernel_Ratezation(uchar4* pfr, uchar4* pto, int width, int heigh
 	pto[xy].z = (byte)(r * 100 / total);
 	pto[xy].y = (byte)(g * 100 / total);
 	pto[xy].x = (byte)(b * 100 / total);
-	
+
 }
 __global__ void kernel_Binaryzation(CppColorRange range, uchar4* pfr, uchar4* pto, int width, int height)
 {
@@ -79,15 +79,15 @@ __global__ void kernel_Binaryzation(CppColorRange range, uchar4* pfr, uchar4* pt
 	if (range.greenUsed != 0)	{ if (gray> grayUp) choosed = false; if (gray< grayDown) choosed = false; }
 	switch (range.operation)
 	{
-		case 0:
-			if (choosed)	{ pto[xy].w = 0;  }
-			break;
-		case 1:
-			if( choosed )	{ pto[xy].w = 1;}
-			break;
-		case 2:
-			if( !choosed )	{ pto[xy].w= 1;}
-			break;
+	case 0:
+		if (choosed)	{ pto[xy].w = 0; }
+		break;
+	case 1:
+		if (choosed)	{ pto[xy].w = 1; }
+		break;
+	case 2:
+		if (!choosed)	{ pto[xy].w = 1; }
+		break;
 	}
 }
 __global__ void kernel_BinaryzationShow(CppColorRange* rangeArr, int count, uchar4* dst, int width, int height, int isAll)
@@ -103,16 +103,17 @@ __global__ void kernel_BinaryzationShow(CppColorRange* rangeArr, int count, ucha
 	int r = redTo;
 	int g = greenTo;
 	int b = blueTo;
+	//printf("%d %d %d\n",r,g,b);
 	int total = r + g + b;
 	if (total == 0) total = 1;
-	int gray= (byte)(total / 3);
+	int gray = (byte)(total / 3);
 	int red = (byte)(r * 100 / total);
 	int green = (byte)(g * 100 / total);
 	int blue = (byte)(b * 100 / total);
 	//比例化结束,二值化开始
 	for (int i = 0; i < count; i++)
 	{
-		CppColorRange range = *(rangeArr+i);
+		CppColorRange range = *(rangeArr + i);
 		bool redUsed = range.redUsed != 0;
 		byte redUp = range.redUp;
 		byte redDown = range.redDown;
@@ -133,74 +134,90 @@ __global__ void kernel_BinaryzationShow(CppColorRange* rangeArr, int count, ucha
 		if (grayUsed)	{ if (gray> grayUp) choosed = false; if (gray< grayDown) choosed = false; }
 		switch (range.operation)
 		{
-			case 0:	if (choosed)	{ grayTo = 0; } break;
-			case 1:	if (choosed)	{ grayTo = 1; }	break;
-			case 2:	if (!choosed)	{ grayTo = 1; }	break;
+		case 0:	if (choosed)	{ grayTo = 0; } break;
+		case 1:	if (choosed)	{ grayTo = 1; }	break;
+		case 2:	if (!choosed)	{ grayTo = 1; }	break;
 		}
 	}
 	//二值化结束 ，抽色显示
 	if (isAll == 1){ if (grayTo == 0){ redTo = 255; greenTo = 128; blueTo = 128; } }
 	else { if (grayTo != 255){ redTo = 0; greenTo = 255; blueTo = 0; } }grayTo = 255;
 }
+static vector<CudaBitmap> bmpList;
+//根据FOV ID获得相对应的bitmap
+CudaBitmap *GetCudaBmp(int fovId)
+{
+	CudaBitmap *bmp;
+	bool isFind = false;
+	for (size_t i = 0; i < bmpList.size(); i++)
+	{
+		if (bmpList.at(i).FovId == fovId)
+		{
+			bmp = &bmpList.at(i);
+			isFind = true;
+			break;
+		}
+	}
+	return bmp;
+}
+void FreeGPUByFovID(int fovId, int isClear)
+{
+	int i = 0;
+	int n = bmpList.size();
+	while (i<n)
+	{
+		if (bmpList.at(i).FovId == fovId || isClear == 1)
+		{
+			bmpList.at(i).MR_FreeHost();
+			bmpList.at(i).MR_FreeDevice();
+			if (isClear == 0)
+			{
+				bmpList.erase(bmpList.begin()+i);
+				break;
+			}
+		}
+		i++;
+	}
+	if (isClear == 1)bmpList.clear();
+}
 //显示抽色信息
 void BinaryShowGPU(CppColorRange*range_host, int count, byte* src_host, byte* dst_host, int width, int height, int isAll)
 {
-		CppTimer time;
-	cudaError_t cudastatus;
-	
-	int memSize = width * height * sizeof(uchar4);
-	//uchar4* src_device;
+	CppTimer time;
+	CudaBitmap bmp;
+	bool isFind = false;
+	for (size_t i = 0; i < bmpList.size(); i++)
+	{
+		if (bmpList.at(i).FovId == 1)
+		{
+			bmp = bmpList.at(i);
+			isFind = true;
+			break;
+		}
+	}
+	if (!isFind)
+	{
+		bmp.MR_Malloc(width, height, src_host, 1, true);
+		bmpList.push_back(bmp);
+	}
 	CppColorRange* range_device;
-	//这里面是将原图锁定到内存，并取到锁页内存中的指针Ptr(静态变量，重复利用该指针)，需要的时候方释放该内存
-	
-	if (!isFirst)
-	{
-		cudastatus = cudaMalloc((void**)&src_device, memSize);
-		//方法一：
-		//申请host锁页内存----------------耗时1
-		cudastatus = cudaHostAlloc((void**)&src_host2, memSize, cudaHostAllocDefault);
-		//拷贝host->host----------------耗时2
-		cudastatus = cudaMemcpy((void**)src_host2, src_host, memSize, cudaMemcpyHostToHost);
-		//拷贝host->device
-		//方法二
-		//host内存注册->锁页内存
-		//cudastatus = cudaHostRegister(range_host, count*sizeof(CppColorRange), cudaHostRegisterMapped);
-		//获得设备指针
-		//cudastatus = cudaHostGetDevicePointer((void **)&range_device, range_host, 0);
-		isFirst = true;
-	}
-	if (src_host2 == NULL)return;
-	//这里是将指针Ptr拷贝到GPU上，传输速率是正常的两倍
-	cudastatus = cudaMemcpy((void**)src_device, src_host2, memSize, cudaMemcpyHostToDevice);
-	if (cudastatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaMemcpy launch failed: %s\n", cudaGetErrorString(cudastatus));
-		return;
-	}
+	bmp.MR_HostToDevice();
+	if (bmp.Device_Data == NULL || bmp.Host_Data == NULL)return;
 	//----------------------------------------------------------------------------/
-	cudastatus = cudaMalloc((void**)&range_device, count*sizeof(CppColorRange));
-	cudastatus = cudaMemcpy((void**)range_device, range_host, count*sizeof(CppColorRange), cudaMemcpyHostToDevice);
+	cudaMalloc((void**)&range_device, count*sizeof(CppColorRange));
+	cudaMemcpy((void**)range_device, range_host, count*sizeof(CppColorRange), cudaMemcpyHostToDevice);
 	dim3 threadsPerBlock(32, 32);
 	time.Begin();
 	dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x, (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
-	kernel_BinaryzationShow << <blocksPerGrid, threadsPerBlock >> >(range_device, count, src_device, width, height, isAll);
+	kernel_BinaryzationShow << <blocksPerGrid, threadsPerBlock >> >(range_device, count,(uchar4*)bmp.Device_Data, width, height, isAll);
 	cudaThreadSynchronize();
 	//----------------------------------------------------------------------------/
 	cudaError_t cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
 	{
-		fprintf(stderr, "kernel_BinaryzationShow launch failed: %s\n", cudaGetErrorString(cudaStatus));
 		return;
 	}
-	time.Reset("kernel calculate");
-	cudastatus = cudaMemcpy((void**)dst_host, src_device, memSize, cudaMemcpyDeviceToHost);
-	if (cudastatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaMemcpy launch failed: %s\n", cudaGetErrorString(cudastatus));
-		return;
-	}
-	time.Reset("copy to host");
-	//cudaFree(src_device);
+	cudaMemcpy((void**)dst_host, bmp.Device_Data, width * height * sizeof(uchar4), cudaMemcpyDeviceToHost);
 	cudaFree(range_device);
 }
 void Ratezation_GPU(byte* src_host, byte* dst_host, int width, int height)
@@ -217,10 +234,10 @@ void Ratezation_GPU(byte* src_host, byte* dst_host, int width, int height)
 	time.Reset("malloc");
 	cudaError_t cudastatus;
 	//Copy To GPU	
-	cudastatus=cudaMemcpy((void**)src_device, src_host, memSize, cudaMemcpyHostToDevice);
+	cudastatus = cudaMemcpy((void**)src_device, src_host, memSize, cudaMemcpyHostToDevice);
 	cudaMemcpy((void**)dst_device, dst_host, memSize, cudaMemcpyHostToDevice);
 	dim3 threadsPerBlock(32, 32);
-	dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x,(height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+	dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x, (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
 	time.Reset("copy to device");
 	cudaDeviceSynchronize();
 	Kernel_Ratezation << <blocksPerGrid, threadsPerBlock >> >(src_device, dst_device, width, height);
@@ -231,7 +248,7 @@ void Ratezation_GPU(byte* src_host, byte* dst_host, int width, int height)
 	cudaFree(dst_device);
 }
 
-void Binaryzation_GPU(CppColorRange* range_host,byte* src_host, byte* dst_host, int width, int height)
+void Binaryzation_GPU(CppColorRange* range_host, byte* src_host, byte* dst_host, int width, int height)
 {
 	CppTimer time;
 	int length = width * height;

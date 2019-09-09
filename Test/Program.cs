@@ -16,19 +16,22 @@ namespace Test_2013
         static void Main()
         {
             ImageProcess.Test(3);
-            bool bo = true;
-            if (!bo)
+            for (int i = 0; i < 5; i++)
             {
-                TestShow("tan");//大图000010
+                if (!false)
+                {
+                    TestShow("tan",i);//大图000010
+                }
+                else
+                {
+                    TestShow("000010",i);
+                }
             }
-            else
-            {
-                TestShow("000010");
-            }
+            
             Console.ReadKey();
         }
 
-        public static void TestShow(string imgName)
+        public static void TestShow(string imgName,int i)
         {
             Bitmap orgBmp;
             orgBmp = Globles.NewReleasedBitmap(path + imgName + ".bmp");
@@ -41,8 +44,7 @@ namespace Test_2013
             cr[0] = Init();
             //cr[1] = Init();
             ImageProcess.BinaryzationShow__GPU(orgBmp,cr,false);
-            orgBmp.Save(path + imgName + "ShowGPU.bmp");
-            orgBmp.Dispose();
+            orgBmp.Save(path + imgName + "_______ShowGPU+"+i+".bmp");
         }
        static int i = 0;
         public static void Test(string imgName,bool isGpu=true)

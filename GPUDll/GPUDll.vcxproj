@@ -252,12 +252,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CppTimer.h" />
+    <ClInclude Include="CudaBitmap.h" />
     <ClInclude Include="GPUDll.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CppTimer.cpp" />
+    <ClCompile Include="CudaBitmap.cpp" />
     <ClCompile Include="dllmain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug64|Win32'">false</CompileAsManaged>

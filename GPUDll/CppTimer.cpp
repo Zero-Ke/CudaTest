@@ -16,6 +16,7 @@ CppTimer::~CppTimer()
 
 void CppTimer::Begin(const char* res)
 {
+	return;
 	std::cout << res << "->开始计时！" << std::endl;
 	beginTime = clock();
 }
@@ -23,6 +24,7 @@ void CppTimer::Begin(const char* res)
 
 void CppTimer::Reset(const char* res)
 {
+	return;
 	endTime = clock();
 	int n = endTime - beginTime;
 	beginTime = clock();
