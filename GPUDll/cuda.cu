@@ -145,28 +145,47 @@ __global__ void kernel_BinaryzationShow(CppColorRange* rangeArr, int count, ucha
 //显示抽色信息
 void BinaryShowGPU(CppColorRange*range_host, int count, byte* src_host, byte* dst_host, int width, int height, int isAll)
 {
-	CppTimer time;
+		CppTimer time;
 	cudaError_t cudastatus;
-	int memSize = width * height * sizeof(uchar4);
-	uchar4* src_device;
-	uchar4* src_device2;
-	CppColorRange* range_device;
-	time.Begin();
-	cudastatus = cudaMalloc((void**)&src_device, memSize);
-	//申请host锁页内存----------------耗时1
-	//拷贝host->host----------------耗时2
-	cudastatus = cudaMemcpy((void**)src_host2, src_host, memSize, cudaMemcpyHostToHost);
-	//拷贝host->device
-	cudastatus = cudaMemcpy((void**)src_device, src_host2, memSize, cudaMemcpyHostToDevice);
-	//host内存注册->锁页内存
-	//获得设备指针
-	cudastatus = cudaHostGetDevicePointer((void **)&range_device, range_host, 0);
 	
+	int memSize = width * height * sizeof(uchar4);
+	//uchar4* src_device;
+	CppColorRange* range_device;
+	//这里面是将原图锁定到内存，并取到锁页内存中的指针Ptr(静态变量，重复利用该指针)，需要的时候方释放该内存
+	
+	if (!isFirst)
+	{
+		cudastatus = cudaMalloc((void**)&src_device, memSize);
+		//方法一：
+		//申请host锁页内存----------------耗时1
+		cudastatus = cudaHostAlloc((void**)&src_host2, memSize, cudaHostAllocDefault);
+		//拷贝host->host----------------耗时2
+		cudastatus = cudaMemcpy((void**)src_host2, src_host, memSize, cudaMemcpyHostToHost);
+		//拷贝host->device
+		//方法二
+		//host内存注册->锁页内存
+		//cudastatus = cudaHostRegister(range_host, count*sizeof(CppColorRange), cudaHostRegisterMapped);
+		//获得设备指针
+		//cudastatus = cudaHostGetDevicePointer((void **)&range_device, range_host, 0);
+		isFirst = true;
+	}
+	if (src_host2 == NULL)return;
+	//这里是将指针Ptr拷贝到GPU上，传输速率是正常的两倍
+	cudastatus = cudaMemcpy((void**)src_device, src_host2, memSize, cudaMemcpyHostToDevice);
+	if (cudastatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMemcpy launch failed: %s\n", cudaGetErrorString(cudastatus));
+		return;
+	}
+	//----------------------------------------------------------------------------/
+	cudastatus = cudaMalloc((void**)&range_device, count*sizeof(CppColorRange));
+	cudastatus = cudaMemcpy((void**)range_device, range_host, count*sizeof(CppColorRange), cudaMemcpyHostToDevice);
 	dim3 threadsPerBlock(32, 32);
 	time.Begin();
 	dim3 blocksPerGrid((width + threadsPerBlock.x - 1) / threadsPerBlock.x, (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
 	kernel_BinaryzationShow << <blocksPerGrid, threadsPerBlock >> >(range_device, count, src_device, width, height, isAll);
 	cudaThreadSynchronize();
+	//----------------------------------------------------------------------------/
 	cudaError_t cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
 	{
@@ -175,14 +194,14 @@ void BinaryShowGPU(CppColorRange*range_host, int count, byte* src_host, byte* ds
 	}
 	time.Reset("kernel calculate");
 	cudastatus = cudaMemcpy((void**)dst_host, src_device, memSize, cudaMemcpyDeviceToHost);
-	if (cudastatus!=cudaSuccess)
+	if (cudastatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMemcpy launch failed: %s\n", cudaGetErrorString(cudastatus));
 		return;
 	}
 	time.Reset("copy to host");
-	cudaFree(src_device);
-	cudaFreeHost(range_device);
+	//cudaFree(src_device);
+	cudaFree(range_device);
 }
 void Ratezation_GPU(byte* src_host, byte* dst_host, int width, int height)
 {
